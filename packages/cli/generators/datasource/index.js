@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2017,2018. All Rights Reserved.
+// Copyright IBM Corp. 2018,2019. All Rights Reserved.
 // Node module: @loopback/cli
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
@@ -238,7 +238,7 @@ module.exports = class DataSourceGenerator extends ArtifactGenerator {
 
     // Setting up data for templates
     this.artifactInfo.className = utils.toClassName(this.artifactInfo.name);
-    this.artifactInfo.fileName = utils.kebabCase(this.artifactInfo.name);
+    this.artifactInfo.fileName = utils.toFileName(this.artifactInfo.name);
     // prettier-ignore
     this.artifactInfo.jsonFileName = `${this.artifactInfo.fileName}.datasource.json`;
     // prettier-ignore
@@ -311,8 +311,10 @@ module.exports = class DataSourceGenerator extends ArtifactGenerator {
       debug(`npmModule - ${pkgs[0]}`);
     } else {
       const connectorName = this.artifactInfo.connector;
-      // Other connectors
-      if (!deps[connectorName]) pkgs.push(connectorName);
+      // Other connectors that are not listed in `connectors.json`.
+      // No install is needed for those in connectors.json but without a
+      // package name as they are built-in connectors
+      if (!deps[connectorName] && !connector) pkgs.push(connectorName);
     }
 
     if (!deps['@loopback/repository']) {

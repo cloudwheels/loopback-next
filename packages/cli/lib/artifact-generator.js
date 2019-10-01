@@ -7,7 +7,6 @@
 const BaseGenerator = require('./base-generator');
 const debug = require('./debug')('artifact-generator');
 const utils = require('./utils');
-const updateIndex = require('./update-index');
 const path = require('path');
 const chalk = require('chalk');
 
@@ -15,6 +14,8 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
   // Note: arguments and options should be defined in the constructor.
   constructor(args, opts) {
     super(args, opts);
+    // how classes are separated when the output contains more than one
+    this.classNameSeparator = ', ';
   }
 
   _setupGenerator() {
@@ -52,7 +53,7 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
         // capitalization
         message: utils.toClassName(this.artifactInfo.type) + ' class name:',
         when: this.artifactInfo.name === undefined,
-        default: this.artifactInfo.name,
+        default: this.artifactInfo.defaultName,
         validate: utils.validateClassName,
       },
     ];
@@ -61,6 +62,23 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
       Object.assign(this.artifactInfo, props);
       return props;
     });
+  }
+
+  /**
+   * remind user the input might get changed if it contains _ or accented char
+   **/
+  promptWarningMsgForName() {
+    utils.logNamingIssues(this.artifactInfo.name, this.log.bind(this));
+  }
+
+  /**
+   * Inform user what model/file names will be created
+   *
+   * e.g: promptClassFileName('model', 'models', 'MyModel');
+   * >> Model MyModel will be created in src/models/my-model.model.ts
+   **/
+  promptClassFileName(type, typePlural, name) {
+    utils.logClassCreation(type, typePlural, name, this.log.bind(this));
   }
 
   scaffold() {
@@ -84,21 +102,20 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
       return;
     }
 
-    let generationStatus = true;
-    // Check all files being generated to ensure they succeeded
-    Object.entries(this.conflicter.generationStatus).forEach(([key, val]) => {
-      if (val === 'skip' || val === 'identical') generationStatus = false;
-    });
-
-    if (generationStatus) {
+    if (this._isGenerationSuccessful()) {
       await this._updateIndexFiles();
+
+      const classes = this.artifactInfo.name
+        .split(this.classNameSeparator)
+        .map(utils.toClassName);
+      const classesOutput = classes.join(this.classNameSeparator);
 
       // User Output
       this.log();
       this.log(
         utils.toClassName(this.artifactInfo.type),
-        chalk.yellow(this.artifactInfo.name),
-        'was created in',
+        chalk.yellow(classesOutput),
+        classes.length > 1 ? 'were created in' : 'was created in',
         `${this.artifactInfo.relPath}/`,
       );
       this.log();
@@ -124,6 +141,7 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
    * }, {dir: '...', file: '...'}]
    */
   async _updateIndexFiles() {
+    debug(`Indexes to be updated ${this.artifactInfo.indexesToBeUpdated}`);
     // Index Update Disabled
     if (this.artifactInfo.disableIndexUpdate) return;
 
@@ -143,20 +161,7 @@ module.exports = class ArtifactGenerator extends BaseGenerator {
     }
 
     for (const idx of this.artifactInfo.indexesToBeUpdated) {
-      await updateIndex(idx.dir, idx.file);
-      // Output for users
-      const updateDirRelPath = path.relative(
-        this.artifactInfo.relPath,
-        idx.dir,
-      );
-
-      const outPath = path.join(
-        this.artifactInfo.relPath,
-        updateDirRelPath,
-        'index.ts',
-      );
-
-      this.log(chalk.green('   update'), `${outPath}`);
+      await this._updateIndexFile(idx.dir, idx.file);
     }
   }
 };

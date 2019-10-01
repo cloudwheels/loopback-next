@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2017,2018. All Rights Reserved.
+// Copyright IBM Corp. 2018,2019. All Rights Reserved.
 // Node module: @loopback/cli
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
@@ -17,6 +17,7 @@ const generator = path.join(__dirname, '../../../generators/datasource');
 const tests = require('../lib/artifact-generator')(generator);
 const baseTests = require('../lib/base-generator')(generator);
 const testUtils = require('../../test-utils');
+const {expectFileToMatchSnapshot} = require('../../snapshots');
 
 // Test Sandbox
 const SANDBOX_PATH = path.resolve(__dirname, '..', '.sandbox');
@@ -86,15 +87,15 @@ describe('lb4 datasource integration', () => {
     ).to.be.rejectedWith(/No package.json found in/);
   });
 
-  it('does not run without the loopback keyword', () => {
+  it('does not run without the "@loopback/core" dependency', () => {
     return expect(
       testUtils
         .executeGenerator(generator)
         .inDir(SANDBOX_PATH, () =>
-          testUtils.givenLBProject(SANDBOX_PATH, {excludeKeyword: true}),
+          testUtils.givenLBProject(SANDBOX_PATH, {excludeLoopbackCore: true}),
         )
         .withPrompts(basicCLIInput),
-    ).to.be.rejectedWith(/No `loopback` keyword found in/);
+    ).to.be.rejectedWith(/No `@loopback\/core` package found/);
   });
 
   describe('basic datasource', () => {
@@ -105,6 +106,7 @@ describe('lb4 datasource integration', () => {
         .withPrompts(basicCLIInput);
 
       checkBasicDataSourceFiles();
+
       assert.jsonFileContent(expectedJSONFile, basicCLIInput);
     });
 
@@ -157,28 +159,9 @@ function checkBasicDataSourceFiles() {
   assert.file(expectedTSFile);
   assert.file(expectedJSONFile);
   assert.file(expectedIndexFile);
+  assert.noFile(path.join(SANDBOX_PATH, 'node_modules/memory'));
 
-  assert.fileContent(expectedTSFile, /import {inject} from '@loopback\/core';/);
-  assert.fileContent(
-    expectedTSFile,
-    /import {juggler} from '@loopback\/repository';/,
-  );
-  assert.fileContent(
-    expectedTSFile,
-    /import \* as config from '.\/ds.datasource.json';/,
-  );
-  assert.fileContent(
-    expectedTSFile,
-    /export class DsDataSource extends juggler.DataSource {/,
-  );
-  assert.fileContent(expectedTSFile, /static dataSourceName = 'ds';/);
-  assert.fileContent(expectedTSFile, /constructor\(/);
-  assert.fileContent(
-    expectedTSFile,
-    /\@inject\('datasources.config.ds', \{optional: true\}\)/,
-  );
-  assert.fileContent(expectedTSFile, /\) \{/);
-  assert.fileContent(expectedTSFile, /super\(dsConfig\);/);
+  expectFileToMatchSnapshot(expectedTSFile);
 
   assert.fileContent(expectedIndexFile, /export \* from '.\/ds.datasource';/);
 }

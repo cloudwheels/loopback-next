@@ -1,14 +1,14 @@
-// Copyright IBM Corp. 2017, 2018. All Rights Reserved.
+// Copyright IBM Corp. 2017,2019. All Rights Reserved.
 // Node module: @loopback/rest
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
-import {ControllerSpec} from '@loopback/openapi-v3';
 import {
+  ControllerSpec,
   OperationObject,
   ParameterObject,
   PathObject,
-} from '@loopback/openapi-v3-types';
+} from '@loopback/openapi-v3';
 import * as assert from 'assert';
 import * as debugFactory from 'debug';
 import * as HttpErrors from 'http-errors';
@@ -19,10 +19,10 @@ import {
   ControllerFactory,
   ControllerRoute,
 } from './controller-route';
+import {ExternalExpressRoutes} from './external-express-routes';
 import {validateApiPath} from './openapi-path';
 import {RestRouter} from './rest-router';
 import {ResolvedRoute, RouteEntry} from './route-entry';
-import {StaticAssetsRoute} from './static-assets-route';
 import {TrieRouter} from './trie-router';
 
 const debug = debugFactory('loopback:rest:routing-table');
@@ -31,18 +31,10 @@ const debug = debugFactory('loopback:rest:routing-table');
  * Routing table
  */
 export class RoutingTable {
-  /**
-   * A route for static assets
-   */
-  private _staticAssetsRoute: StaticAssetsRoute;
   constructor(
     private readonly _router: RestRouter = new TrieRouter(),
-    staticAssetsRoute?: StaticAssetsRoute,
-  ) {
-    if (staticAssetsRoute) {
-      this._staticAssetsRoute = staticAssetsRoute;
-    }
-  }
+    private _externalRoutes?: ExternalExpressRoutes,
+  ) {}
 
   /**
    * Register a controller as the route
@@ -93,7 +85,7 @@ export class RoutingTable {
 
   /**
    * Register a route
-   * @param route A route entry
+   * @param route - A route entry
    */
   registerRoute(route: RouteEntry) {
     // TODO(bajtos) handle the case where opSpec.parameters contains $ref
@@ -143,15 +135,14 @@ export class RoutingTable {
       return found;
     }
 
-    // this._staticAssetsRoute will be set only if app.static() was called
-    if (this._staticAssetsRoute) {
+    if (this._externalRoutes) {
       debug(
-        'No API route found for %s %s, trying to find a static asset',
+        'No API route found for %s %s, trying to find an external Express route',
         request.method,
         request.path,
       );
 
-      return this._staticAssetsRoute;
+      return this._externalRoutes.find(request);
     }
 
     debug('No route found for %s %s', request.method, request.path);

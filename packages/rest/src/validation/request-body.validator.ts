@@ -1,33 +1,35 @@
-// Copyright IBM Corp. 2018. All Rights Reserved.
+// Copyright IBM Corp. 2018,2019. All Rights Reserved.
 // Node module: @loopback/rest
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
 import {
+  ReferenceObject,
   RequestBodyObject,
   SchemaObject,
-  ReferenceObject,
   SchemasObject,
-} from '@loopback/openapi-v3-types';
+} from '@loopback/openapi-v3';
 import * as AJV from 'ajv';
 import * as debugModule from 'debug';
-import * as util from 'util';
-import {HttpErrors, RestHttpErrors, RequestBody} from '..';
 import * as _ from 'lodash';
+import * as util from 'util';
+import {HttpErrors, RequestBody, RestHttpErrors} from '..';
+import {RequestBodyValidationOptions, SchemaValidatorCache} from '../types';
 
 const toJsonSchema = require('openapi-schema-to-json-schema');
 const debug = debugModule('loopback:rest:validation');
 
-export type RequestBodyValidationOptions = AJV.Options;
+const ajvKeywords = require('ajv-keywords');
 
 /**
  * Check whether the request body is valid according to the provided OpenAPI schema.
  * The JSON schema is generated from the OpenAPI schema which is typically defined
  * by `@requestBody()`.
- * The validation leverages AJS schema validator.
- * @param body The request body parsed from an HTTP request.
- * @param requestBodySpec The OpenAPI requestBody specification defined in `@requestBody()`.
- * @param globalSchemas The referenced schemas generated from `OpenAPISpec.components.schemas`.
+ * The validation leverages AJV schema validator.
+ * @param body - The request body parsed from an HTTP request.
+ * @param requestBodySpec - The OpenAPI requestBody specification defined in `@requestBody()`.
+ * @param globalSchemas - The referenced schemas generated from `OpenAPISpec.components.schemas`.
+ * @param options - Request body validation options for AJV
  */
 export function validateRequestBody(
   body: RequestBody,
@@ -37,7 +39,7 @@ export function validateRequestBody(
 ) {
   const required = requestBodySpec && requestBodySpec.required;
 
-  if (required && body.value == undefined) {
+  if (required && body.value == null) {
     const err = Object.assign(
       new HttpErrors.BadRequest('Request body is required'),
       {
@@ -55,13 +57,13 @@ export function validateRequestBody(
   }
   if (!schema) return;
 
-  options = Object.assign({coerceTypes: body.coercionRequired}, options);
+  options = Object.assign({coerceTypes: !!body.coercionRequired}, options);
   validateValueAgainstSchema(body.value, schema, globalSchemas, options);
 }
 
 /**
  * Convert an OpenAPI schema to the corresponding JSON schema.
- * @param openapiSchema The OpenAPI schema to convert.
+ * @param openapiSchema - The OpenAPI schema to convert.
  */
 function convertToJsonSchema(openapiSchema: SchemaObject) {
   const jsonSchema = toJsonSchema(openapiSchema);
@@ -77,28 +79,57 @@ function convertToJsonSchema(openapiSchema: SchemaObject) {
 }
 
 /**
- * Validate the request body data against JSON schema.
- * @param body The request body data.
- * @param schema The JSON schema used to perform the validation.
- * @param globalSchemas Schema references.
+ * Built-in cache for complied schemas by AJV
  */
+const DEFAULT_COMPILED_SCHEMA_CACHE: SchemaValidatorCache = new WeakMap();
 
-const compiledSchemaCache = new WeakMap();
+/**
+ * Build a cache key for AJV options
+ * @param options - Request body validation options
+ */
+function getKeyForOptions(options: RequestBodyValidationOptions) {
+  const ajvOptions: Record<string, unknown> = {};
+  // Sort keys for options
+  const keys = Object.keys(
+    options,
+  ).sort() as (keyof RequestBodyValidationOptions)[];
+  for (const k of keys) {
+    if (k === 'compiledSchemaCache') continue;
+    ajvOptions[k] = options[k];
+  }
+  return JSON.stringify(ajvOptions);
+}
 
+/**
+ * Validate the request body data against JSON schema.
+ * @param body - The request body data.
+ * @param schema - The JSON schema used to perform the validation.
+ * @param globalSchemas - Schema references.
+ * @param options - Request body validation options.
+ */
 function validateValueAgainstSchema(
-  // tslint:disable-next-line:no-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body: any,
   schema: SchemaObject | ReferenceObject,
-  globalSchemas?: SchemasObject,
-  options?: RequestBodyValidationOptions,
+  globalSchemas: SchemasObject = {},
+  options: RequestBodyValidationOptions = {},
 ) {
-  let validate;
+  let validate: AJV.ValidateFunction | undefined;
 
-  if (compiledSchemaCache.has(schema)) {
-    validate = compiledSchemaCache.get(schema);
-  } else {
+  const cache = options.compiledSchemaCache || DEFAULT_COMPILED_SCHEMA_CACHE;
+  const key = getKeyForOptions(options);
+
+  let validatorMap: Map<string, AJV.ValidateFunction> | undefined;
+  if (cache.has(schema)) {
+    validatorMap = cache.get(schema)!;
+    validate = validatorMap.get(key);
+  }
+
+  if (!validate) {
     validate = createValidator(schema, globalSchemas, options);
-    compiledSchemaCache.set(schema, validate);
+    validatorMap = validatorMap || new Map();
+    validatorMap.set(key, validate);
+    cache.set(schema, validatorMap);
   }
 
   if (validate(body)) {
@@ -106,11 +137,19 @@ function validateValueAgainstSchema(
     return;
   }
 
-  const validationErrors = validate.errors;
+  let validationErrors = validate.errors as AJV.ErrorObject[];
 
   /* istanbul ignore if */
   if (debug.enabled) {
-    debug('Invalid request body: %s', util.inspect(validationErrors));
+    debug(
+      'Invalid request body: %s. Errors: %s',
+      util.inspect(body, {depth: null}),
+      util.inspect(validationErrors),
+    );
+  }
+
+  if (typeof options.ajvErrorTransformer === 'function') {
+    validationErrors = options.ajvErrorTransformer(validationErrors);
   }
 
   const error = RestHttpErrors.invalidRequestBody();
@@ -129,7 +168,7 @@ function createValidator(
   schema: SchemaObject,
   globalSchemas?: SchemasObject,
   options?: RequestBodyValidationOptions,
-): Function {
+): AJV.ValidateFunction {
   const jsonSchema = convertToJsonSchema(schema);
 
   const schemaWithRef = Object.assign({components: {}}, jsonSchema);
@@ -137,15 +176,24 @@ function createValidator(
     schemas: globalSchemas,
   };
 
-  const ajv = new AJV(
-    Object.assign(
-      {},
-      {
-        allErrors: true,
-      },
-      options,
-    ),
+  // See https://github.com/epoberezkin/ajv#options
+  options = Object.assign(
+    {},
+    {
+      allErrors: true,
+      // nullable: support keyword "nullable" from Open API 3 specification.
+      nullable: true,
+    },
+    options,
   );
+  debug('AJV options', options);
+  const ajv = new AJV(options);
+
+  if (options.ajvKeywords === true) {
+    ajvKeywords(ajv);
+  } else if (Array.isArray(options.ajvKeywords)) {
+    ajvKeywords(ajv, options.ajvKeywords);
+  }
 
   return ajv.compile(schemaWithRef);
 }

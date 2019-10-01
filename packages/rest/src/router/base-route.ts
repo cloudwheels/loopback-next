@@ -1,10 +1,10 @@
-// Copyright IBM Corp. 2017, 2018. All Rights Reserved.
+// Copyright IBM Corp. 2018. All Rights Reserved.
 // Node module: @loopback/rest
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
 import {Context} from '@loopback/context';
-import {OperationObject} from '@loopback/openapi-v3-types';
+import {OperationObject} from '@loopback/openapi-v3';
 import {OperationArgs, OperationRetval} from '../types';
 import {RouteEntry} from './route-entry';
 
@@ -16,9 +16,9 @@ export abstract class BaseRoute implements RouteEntry {
 
   /**
    * Construct a new route
-   * @param verb http verb
-   * @param path http request path pattern
-   * @param spec OpenAPI operation spec
+   * @param verb - http verb
+   * @param path - http request path pattern
+   * @param spec - OpenAPI operation spec
    */
   constructor(
     verb: string,

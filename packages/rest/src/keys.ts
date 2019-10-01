@@ -1,18 +1,17 @@
-// Copyright IBM Corp. 2017. All Rights Reserved.
+// Copyright IBM Corp. 2017,2019. All Rights Reserved.
 // Node module: @loopback/rest
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
-import {CoreBindings} from '@loopback/core';
 import {BindingKey, Context} from '@loopback/context';
-
-/**
- * See https://github.com/Microsoft/TypeScript/issues/26985
- */
-// import {OpenApiSpec} from '@loopback/openapi-v3-types';
-import {OpenAPIObject as OpenApiSpec} from 'openapi3-ts';
-
+import {CoreBindings} from '@loopback/core';
+import {HttpProtocol} from '@loopback/http-server';
+import {OpenApiSpec} from '@loopback/openapi-v3';
+import * as https from 'https';
+import {ErrorWriterOptions} from 'strong-error-handler';
+import {BodyParser, RequestBodyParser} from './body-parsers';
 import {HttpHandler} from './http-handler';
+import {RestRouter, RestRouterOptions} from './router';
 import {SequenceHandler} from './sequence';
 import {
   BindElement,
@@ -20,18 +19,14 @@ import {
   GetFromContext,
   InvokeMethod,
   LogError,
-  Request,
-  Response,
   ParseParams,
   Reject,
-  Send,
+  Request,
   RequestBodyParserOptions,
+  Response,
+  Send,
 } from './types';
-
-import {HttpProtocol} from '@loopback/http-server';
-import * as https from 'https';
-import {ErrorWriterOptions} from 'strong-error-handler';
-import {RestRouter} from './router';
+import {RestServer} from './rest.server';
 
 /**
  * RestServer-specific bindings
@@ -50,6 +45,10 @@ export namespace RestBindings {
    */
   export const PORT = BindingKey.create<number>('rest.port');
   /**
+   * Binding key for setting and injecting the socket path of the RestServer
+   */
+  export const PATH = BindingKey.create<string | undefined>('rest.path');
+  /**
    * Binding key for setting and injecting the URL of RestServer
    */
   export const URL = BindingKey.create<string>('rest.url');
@@ -63,6 +62,17 @@ export namespace RestBindings {
   export const HTTPS_OPTIONS = BindingKey.create<https.ServerOptions>(
     'rest.httpsOptions',
   );
+
+  /**
+   * Binding key for the server itself
+   */
+  export const SERVER = BindingKey.create<RestServer>('servers.RestServer');
+
+  /**
+   * Internal binding key for basePath
+   */
+  export const BASE_PATH = BindingKey.create<string>('rest.basePath');
+
   /**
    * Internal binding key for http-handler
    */
@@ -72,6 +82,10 @@ export namespace RestBindings {
    * Internal binding key for rest router
    */
   export const ROUTER = BindingKey.create<RestRouter>('rest.router');
+
+  export const ROUTER_OPTIONS = BindingKey.create<RestRouterOptions>(
+    'rest.router.options',
+  );
 
   /**
    * Binding key for setting and injecting Reject action's error handling
@@ -85,9 +99,58 @@ export namespace RestBindings {
     'rest.errorWriterOptions',
   );
 
+  /**
+   * Binding key for request body parser options
+   */
   export const REQUEST_BODY_PARSER_OPTIONS = BindingKey.create<
     RequestBodyParserOptions
   >('rest.requestBodyParserOptions');
+
+  /**
+   * Binding key for request body parser
+   */
+  export const REQUEST_BODY_PARSER = BindingKey.create<RequestBodyParser>(
+    'rest.requestBodyParser',
+  );
+
+  function bodyParserBindingKey(parser: string) {
+    return `${REQUEST_BODY_PARSER}.${parser}`;
+  }
+
+  /**
+   * Binding key for request json body parser
+   */
+  export const REQUEST_BODY_PARSER_JSON = BindingKey.create<BodyParser>(
+    bodyParserBindingKey('JsonBodyParser'),
+  );
+
+  /**
+   * Binding key for request urlencoded body parser
+   */
+  export const REQUEST_BODY_PARSER_URLENCODED = BindingKey.create<BodyParser>(
+    bodyParserBindingKey('UrlEncodedBodyParser'),
+  );
+
+  /**
+   * Binding key for request text body parser
+   */
+  export const REQUEST_BODY_PARSER_TEXT = BindingKey.create<BodyParser>(
+    bodyParserBindingKey('TextBodyParser'),
+  );
+
+  /**
+   * Binding key for request raw body parser
+   */
+  export const REQUEST_BODY_PARSER_RAW = BindingKey.create<BodyParser>(
+    bodyParserBindingKey('RawBodyParser'),
+  );
+
+  /**
+   * Binding key for request raw body parser
+   */
+  export const REQUEST_BODY_PARSER_STREAM = BindingKey.create<BodyParser>(
+    bodyParserBindingKey('StreamBodyParser'),
+  );
 
   /**
    * Binding key for setting and injecting an OpenAPI spec

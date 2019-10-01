@@ -1,8 +1,16 @@
+.github/
 /coverage
-**/*/api-docs
+/docs/apidocs
+/docs/site/apidocs
 packages/cli/generators/*/templates
+packages/cli/snapshots/
+packages/tsdocs/fixtures/monorepo/docs
+packages/tsdocs/fixtures/monorepo/**/dist
+packages/tsdocs/fixtures/monorepo/**/docs
 **/.sandbox
+acceptance/*/dist
 packages/*/dist
+extensions/*/dist
 examples/*/dist
 benchmark/dist
 sandbox/**/*

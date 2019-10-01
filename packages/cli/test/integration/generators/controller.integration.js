@@ -18,6 +18,8 @@ const tests = require('../lib/artifact-generator')(generator);
 const baseTests = require('../lib/base-generator')(generator);
 const testUtils = require('../../test-utils');
 
+const {expectFileToMatchSnapshot} = require('../../snapshots');
+
 // Test Sandbox
 const SANDBOX_PATH = path.resolve(__dirname, '..', '.sandbox');
 const sandbox = new TestSandbox(SANDBOX_PATH);
@@ -29,11 +31,12 @@ const basicCLIInput = {
 const restCLIInput = {
   name: 'productReview',
   controllerType: ControllerGenerator.REST,
-  id: 'number',
+  id: 'productId',
+  idType: 'number',
 };
 
 // Expected File Name
-const expectedFile = path.join(
+const filePath = path.join(
   SANDBOX_PATH,
   '/src/controllers/product-review.controller.ts',
 );
@@ -56,15 +59,15 @@ describe('lb4 controller', () => {
     ).to.be.rejectedWith(/No package.json found in/);
   });
 
-  it('does not run without the loopback keyword', () => {
+  it('does not run without "@loopback/core" as a dependency', () => {
     return expect(
       testUtils
         .executeGenerator(generator)
         .inDir(SANDBOX_PATH, () =>
-          testUtils.givenLBProject(SANDBOX_PATH, {excludeKeyword: true}),
+          testUtils.givenLBProject(SANDBOX_PATH, {excludeLoopbackCore: true}),
         )
         .withPrompts(basicCLIInput),
-    ).to.be.rejectedWith(/No `loopback` keyword found in/);
+    ).to.be.rejectedWith(/No `@loopback\/core` package found/);
   });
 
   describe('basic controller', () => {
@@ -74,7 +77,6 @@ describe('lb4 controller', () => {
         .inDir(SANDBOX_PATH, () => testUtils.givenLBProject(SANDBOX_PATH))
         .withPrompts(basicCLIInput);
 
-      assert.file(expectedFile);
       checkBasicContents();
     });
 
@@ -84,7 +86,7 @@ describe('lb4 controller', () => {
         .inDir(SANDBOX_PATH, () => testUtils.givenLBProject(SANDBOX_PATH))
         .withArguments('productReview');
 
-      assert.file(expectedFile);
+      assert.file(filePath);
       checkBasicContents();
     });
   });
@@ -99,7 +101,7 @@ describe('lb4 controller', () => {
       restCLIInput,
     );
 
-    it('creates REST CRUD template with valid input', async () => {
+    it('creates REST CRUD template with valid input - id omitted', async () => {
       await testUtils
         .executeGenerator(generator)
         .inDir(SANDBOX_PATH, () =>
@@ -110,7 +112,23 @@ describe('lb4 controller', () => {
         )
         .withPrompts(restCLIInputComplete);
 
-      checkRestCrudContents();
+      checkRestCrudContents({idOmitted: true});
+    });
+
+    it('creates REST CRUD template with valid input', async () => {
+      await testUtils
+        .executeGenerator(generator)
+        .inDir(SANDBOX_PATH, () =>
+          testUtils.givenLBProject(SANDBOX_PATH, {
+            includeDummyModel: true,
+            includeDummyRepository: true,
+          }),
+        )
+        .withPrompts(
+          Object.assign({}, restCLIInputComplete, {idOmitted: false}),
+        );
+
+      checkRestCrudContents({idOmitted: false});
     });
 
     describe('HTTP REST path', () => {
@@ -223,8 +241,7 @@ describe('lb4 controller', () => {
  * Helper function to check the contents of a basic controller
  */
 function checkBasicContents() {
-  assert.fileContent(expectedFile, /class ProductReviewController/);
-  assert.fileContent(expectedFile, /constructor\(\) {}/);
+  expectFileToMatchSnapshot(filePath);
 }
 
 /**
@@ -233,102 +250,8 @@ function checkBasicContents() {
  * that decorators are grouped correctly (for their corresponding
  * target functions)
  */
-function checkRestCrudContents() {
-  assert.fileContent(expectedFile, /class ProductReviewController/);
-
-  // Repository and injection
-  assert.fileContent(expectedFile, /\@repository\(BarRepository\)/);
-  assert.fileContent(expectedFile, /barRepository \: BarRepository/);
-
-  // Assert that the decorators are present in the correct groupings!
-  // @post - create
-  const postCreateRegEx = [
-    /\@post\('\/product-reviews', {/,
-    /responses: {/,
-    /'200': {/,
-    /description: 'ProductReview model instance'/,
-    /content: {'application\/json': {schema: {'x-ts-type': ProductReview}}},\s{1,}},\s{1,}},\s{1,}}\)/,
-    /async create\(\@requestBody\(\) productReview: ProductReview\)/,
-  ];
-  postCreateRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @get - count
-  const getCountRegEx = [
-    /\@get\('\/product-reviews\/count', {/,
-    /responses: {/,
-    /'200': {/,
-    /description: 'ProductReview model count'/,
-    /content: {'application\/json': {schema: CountSchema}},\s{1,}},\s{1,}},\s{1,}}\)/,
-    /async count\(\s+\@param\.query\.object\('where', getWhereSchemaFor\(ProductReview\)\) where\?: Where(|,\s+)\)/,
-  ];
-  getCountRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @get - find
-  const getFindRegEx = [
-    /\@get\('\/product-reviews', {/,
-    /responses: {/,
-    /'200': {/,
-    /description: 'Array of ProductReview model instances'/,
-    /content: {'application\/json': {schema: {'x-ts-type': ProductReview}}},\s{1,}},\s{1,}},\s{1,}}\)/,
-    /async find\(\s*\@param\.query\.object\('filter', getFilterSchemaFor\(ProductReview\)\) filter\?: Filter(|,\s+)\)/,
-  ];
-  getFindRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @patch - updateAll
-  const patchUpdateAllRegEx = [
-    /\@patch\('\/product-reviews', {/,
-    /responses: {/,
-    /'200': {/,
-    /description: 'ProductReview PATCH success count'/,
-    /content: {'application\/json': {schema: CountSchema}},\s{1,}},\s{1,}},\s{1,}}\)/,
-    /async updateAll\(\s{1,}\@requestBody\(\) productReview: ProductReview,\s{1,} @param\.query\.object\('where', getWhereSchemaFor\(ProductReview\)\) where\?: Where(|,\s+)\)/,
-  ];
-  patchUpdateAllRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @get - findById
-  const getFindByIdRegEx = [
-    /\@get\('\/product-reviews\/{id}', {/,
-    /responses: {/,
-    /'200': {/,
-    /description: 'ProductReview model instance'/,
-    /content: {'application\/json': {schema: {'x-ts-type': ProductReview}}},\s{1,}},\s{1,}},\s{1,}}\)/,
-    /async findById\(\@param.path.number\('id'\)/,
-  ];
-  getFindByIdRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @patch - updateById
-  const patchUpdateByIdRegEx = [
-    /\@patch\('\/product-reviews\/{id}'/,
-    /responses: {/,
-    /'204': {/,
-    /description: 'ProductReview PATCH success'/,
-    /async updateById\(\s{1,}\@param.path.number\('id'\) id: number,\s{1,}\@requestBody\(\) productReview: ProductReview,\s+\)/,
-  ];
-  patchUpdateByIdRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
-
-  // @del - deleteById
-  const deleteByIdRegEx = [
-    /\@del\('\/product-reviews\/{id}', {/,
-    /responses: {/,
-    /'204': {/,
-    /description: 'ProductReview DELETE success'/,
-    /async deleteById\(\@param.path.number\('id'\) id: number\)/,
-  ];
-  deleteByIdRegEx.forEach(regex => {
-    assert.fileContent(expectedFile, regex);
-  });
+function checkRestCrudContents(options) {
+  expectFileToMatchSnapshot(filePath);
 }
 
 /**
@@ -337,31 +260,31 @@ function checkRestCrudContents() {
  */
 function checkRestPaths(restUrl) {
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@post\('/.source + restUrl + /', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@get\('/.source + restUrl + /\/count', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@get\('/.source + restUrl + /', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@patch\('/.source + restUrl + /', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@get\('/.source + restUrl + /\/{id}', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@patch\('/.source + restUrl + /\/{id}', {/.source),
   );
   assert.fileContent(
-    expectedFile,
+    filePath,
     new RegExp(/@del\('/.source + restUrl + /\/{id}', {/.source),
   );
 }

@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2017,2018. All Rights Reserved.
+// Copyright IBM Corp. 2018,2019. All Rights Reserved.
 // Node module: @loopback/repository
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
@@ -34,12 +34,10 @@ export const MODEL_WITH_PROPERTIES_KEY = MetadataAccessor.create<
 
 export type PropertyMap = MetadataMap<PropertyDefinition>;
 
-// tslint:disable:no-any
-
 /**
  * Decorator for model definitions
  * @param definition
- * @returns {(target:any)}
+ * @returns A class decorator for `model`
  */
 export function model(definition?: Partial<ModelDefinitionSyntax>) {
   return function(target: Function & {definition?: ModelDefinition}) {
@@ -50,6 +48,7 @@ export function model(definition?: Partial<ModelDefinitionSyntax>) {
     const decorator = ClassDecoratorFactory.createDecorator(
       MODEL_KEY,
       definition,
+      {decoratorName: '@model'},
     );
 
     decorator(target);
@@ -61,8 +60,8 @@ export function model(definition?: Partial<ModelDefinitionSyntax>) {
 
 /**
  * Build model definition from decorations
- * @param target Target model class
- * @param def Model definition spec
+ * @param target - Target model class
+ * @param def - Model definition spec
  */
 export function buildModelDefinition(
   target: Function & {definition?: ModelDefinition | undefined},
@@ -107,12 +106,13 @@ export function buildModelDefinition(
 /**
  * Decorator for model properties
  * @param definition
- * @returns {(target:any, key:string)}
+ * @returns A property decorator
  */
 export function property(definition?: Partial<PropertyDefinition>) {
   return PropertyDecoratorFactory.createDecorator(
     MODEL_PROPERTIES_KEY,
     Object.assign({}, definition),
+    {decoratorName: '@property'},
   );
 }
 
@@ -123,16 +123,16 @@ export namespace property {
 
   /**
    *
-   * @param itemType The type of array items.
+   * @param itemType - The type of array items.
    * Examples: `number`, `Product`, `() => Order`.
-   * @param definition Optional PropertyDefinition object for additional
+   * @param definition - Optional PropertyDefinition object for additional
    * metadata
    */
   export function array(
     itemType: PropertyType,
     definition?: Partial<PropertyDefinition>,
   ) {
-    return function(target: Object, propertyName: string) {
+    return function(target: object, propertyName: string) {
       const propType = MetadataInspector.getDesignTypeForProperty(
         target,
         propertyName,

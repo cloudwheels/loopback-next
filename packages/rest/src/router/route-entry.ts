@@ -1,10 +1,10 @@
-// Copyright IBM Corp. 2017, 2018. All Rights Reserved.
+// Copyright IBM Corp. 2018. All Rights Reserved.
 // Node module: @loopback/rest
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
 import {Context} from '@loopback/context';
-import {OperationObject, SchemasObject} from '@loopback/openapi-v3-types';
+import {OperationObject, SchemasObject} from '@loopback/openapi-v3';
 import {OperationArgs, OperationRetval, PathParameterValues} from '../types';
 
 /**

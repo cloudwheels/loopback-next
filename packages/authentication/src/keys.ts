@@ -1,35 +1,45 @@
-// Copyright IBM Corp. 2017. All Rights Reserved.
+// Copyright IBM Corp. 2017,2019. All Rights Reserved.
 // Node module: @loopback/authentication
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
-import {Strategy} from 'passport';
-import {AuthenticateFn, UserProfile} from './types';
-import {AuthenticationMetadata} from './decorators';
 import {BindingKey} from '@loopback/context';
 import {MetadataAccessor} from '@loopback/metadata';
+import {SecurityBindings} from '@loopback/security';
+import {AuthenticationComponent} from './authentication.component';
+import {
+  AuthenticateFn,
+  AuthenticationMetadata,
+  AuthenticationStrategy,
+} from './types';
 
 /**
  * Binding keys used by this component.
  */
 export namespace AuthenticationBindings {
+  export const COMPONENT = BindingKey.create<AuthenticationComponent>(
+    'components.AuthenticationComponent',
+  );
+
   /**
    * Key used to bind an authentication strategy to the context for the
    * authentication function to use.
    *
+   * @example
    * ```ts
    * server
    *   .bind(AuthenticationBindings.STRATEGY)
-   *   .toProvider(MyPassportStrategyProvider);
+   *   .toProvider(MyAuthenticationStrategy);
    * ```
    */
-  export const STRATEGY = BindingKey.create<Strategy | undefined>(
+  export const STRATEGY = BindingKey.create<AuthenticationStrategy | undefined>(
     'authentication.strategy',
   );
 
   /**
    * Key used to inject the authentication function into the sequence.
    *
+   * @example
    * ```ts
    * class MySequence implements SequenceHandler {
    *   constructor(
@@ -65,6 +75,7 @@ export namespace AuthenticationBindings {
    * Key used to inject authentication metadata, which is used to determine
    * whether a request requires authentication or not.
    *
+   * @example
    * ```ts
    * class MyPassportStrategyProvider implements Provider<Strategy | undefined> {
    *   constructor(
@@ -84,27 +95,30 @@ export namespace AuthenticationBindings {
     'authentication.operationMetadata',
   );
 
-  /**
-   * Key used to inject the user instance retrieved by the
-   * authentication function
-   *
-   * class MyController {
-   *   constructor(
-   *     @inject(AuthenticationBindings.CURRENT_USER) private user: UserProfile,
-   *   ) {}
-   *
-   * // ... routes that may need authentication
-   * }
-   */
-  export const CURRENT_USER = BindingKey.create<UserProfile | undefined>(
-    'authentication.currentUser',
-  );
+  export const AUTHENTICATION_STRATEGY_EXTENSION_POINT_NAME =
+    'authentication.strategies';
+
+  // Make `CURRENT_USER` the alias of the security bindings
+  export const CURRENT_USER = SecurityBindings.USER;
 }
 
 /**
- * The key used to store log-related via @loopback/metadata and reflection.
+ * The key used to store method-level metadata for `@authenticate`
  */
-export const AUTHENTICATION_METADATA_KEY = MetadataAccessor.create<
+export const AUTHENTICATION_METADATA_METHOD_KEY = MetadataAccessor.create<
   AuthenticationMetadata,
   MethodDecorator
->('authentication.operationsMetadata');
+>('authentication:method');
+
+/**
+ * Alias for AUTHENTICATION_METADATA_METHOD_KEY to keep it backward compatible
+ */
+export const AUTHENTICATION_METADATA_KEY = AUTHENTICATION_METADATA_METHOD_KEY;
+
+/**
+ * The key used to store class-level metadata for `@authenticate`
+ */
+export const AUTHENTICATION_METADATA_CLASS_KEY = MetadataAccessor.create<
+  AuthenticationMetadata,
+  ClassDecorator
+>('authentication:class');
